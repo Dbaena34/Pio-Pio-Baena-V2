@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Bases de Datos y Configuración
+*.sqlite3
+.env
+utils/config_local.py
+*.db
+# Gráficos y Reportes temporales
+*.png
+*.pdf
+outputs/
