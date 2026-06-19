@@ -14,7 +14,7 @@ import sys
 sys.path.append('..')
 
 from data.database import db
-from data.models import ProduccionRepository, GallinasRepository, StockRepository
+from data.models import ProduccionRepository, GallinasRepository, StockRepository, InsumosRepository
 
 MAPEO_CATEGORIAS = {
     'C': 'tipo_c',
@@ -32,6 +32,7 @@ class ProduccionModule:
         self.produccion_repo = ProduccionRepository(db)
         self.gallinas_repo = GallinasRepository(db)
         self.stock_repo = StockRepository(db)
+        self.insumos_repo = InsumosRepository(db) 
 
         self.categorias = ['C', 'B', 'A', 'AA', 'AAA', 'Jumbo']
         self.entry_vars = {}
@@ -406,17 +407,22 @@ class ProduccionModule:
     def guardar_gallinas(self):
         try:
             fecha = datetime.strptime(self.fecha_entry.get(), "%Y-%m-%d").date()
-            hora = self.hora_entry.get()
+            hora = datetime.now().strftime("%H:%M:%S")
 
             descartes = int(self.descartes_entry.get() or 0)
             obs = self.obs_gallinas_entry.get().strip()
 
             # Tomar la población actual de la BD como base
             poblacion_actual = self.gallinas_repo.obtener_poblacion_actual()
-            cant_gallinas = poblacion_actual.get('cantidad_gallinas', 0)
+            cant_gallinas_bd = poblacion_actual.get('cantidad_gallinas', 0)
+            cant_gallinas_campo = int(self.cant_gallinas_entry.get() or 0)
+
+            # Si el campo fue modificado, usar ese valor (reemplazo de población)
+            # Si es igual a la BD, usar la BD (flujo normal de descartes)
+            cant_gallinas = cant_gallinas_campo if cant_gallinas_campo != cant_gallinas_bd else cant_gallinas_bd
 
             if cant_gallinas == 0:
-                messagebox.showwarning("Advertencia", "No hay población registrada aún")
+                messagebox.showwarning("Advertencia", "Debes ingresar la cantidad de gallinas")
                 return
 
             cantidad_efectiva = max(0, cant_gallinas - descartes)
@@ -447,7 +453,6 @@ class ProduccionModule:
 
             consumo = float(self.consumo_gallina_entry.get() or 0)
 
-            # 🔥 SIEMPRE BD
             poblacion_actual = self.gallinas_repo.obtener_poblacion_actual()
             gallinas = poblacion_actual.get('cantidad_gallinas', 0)
 
@@ -469,9 +474,26 @@ class ProduccionModule:
                 observaciones=obs if obs else None
             )
 
-            total = consumo * gallinas
+            total_gramos = consumo * gallinas
+            total_kg = total_gramos / 1000
 
-            messagebox.showinfo("Éxito", f"Consumo registrado: {total/1000:.2f} kg")
+            # Descontar del stock de alimento (el consumo está en gramos, stock en kg)
+        
+            total_bultos = total_kg / 40
+            hay_stock = self.insumos_repo.descontar_cuido_unificado(
+                cantidad_a_descontar=total_bultos,
+                motivo=f"Cuido diario {fecha} - {gallinas} gallinas"
+)
+
+            if hay_stock:
+                messagebox.showinfo("Éxito", f"Consumo registrado: {total_kg:.2f} kg ({total_bultos:.3f} bultos)\n"f"Descontado del stock de alimento.")
+            else:
+                messagebox.showwarning(
+                    "⚠️ Stock insuficiente",
+                    f"Consumo registrado: {total_kg:.2f} kg\n"
+                    f"Pero el stock de alimento disponible es menor.\n"
+                    f"Revisa el módulo de Insumos y Pagos."
+                )
 
         except Exception as e:
             messagebox.showerror("Error", str(e))
