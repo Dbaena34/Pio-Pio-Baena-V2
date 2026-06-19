@@ -11,6 +11,7 @@ env/
 .env
 utils/config_local.py
 *.db
+*.xlsx
 # Gráficos y Reportes temporales
 *.png
 *.pdf
