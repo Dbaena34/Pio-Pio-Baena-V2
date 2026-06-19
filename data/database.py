@@ -36,6 +36,7 @@ class Database:
         """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row  # Permite acceso por nombre de columna
+        conn.execute("PRAGMA journal_mode=WAL")  # ← añadir esta línea
         try:
             yield conn
             conn.commit()

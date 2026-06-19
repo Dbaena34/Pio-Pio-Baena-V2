@@ -408,24 +408,34 @@ class ProduccionModule:
             fecha = datetime.strptime(self.fecha_entry.get(), "%Y-%m-%d").date()
             hora = self.hora_entry.get()
 
-            cant_gallinas = int(self.cant_gallinas_entry.get() or 0)
             descartes = int(self.descartes_entry.get() or 0)
             obs = self.obs_gallinas_entry.get().strip()
 
+            # Tomar la población actual de la BD como base
+            poblacion_actual = self.gallinas_repo.obtener_poblacion_actual()
+            cant_gallinas = poblacion_actual.get('cantidad_gallinas', 0)
+
             if cant_gallinas == 0:
-                messagebox.showwarning("Advertencia", "Debes ingresar la cantidad de gallinas")
+                messagebox.showwarning("Advertencia", "No hay población registrada aún")
                 return
+
+            cantidad_efectiva = max(0, cant_gallinas - descartes)
 
             self.gallinas_repo.registrar_poblacion(
                 fecha=fecha,
                 hora=hora,
-                cantidad_gallinas=cant_gallinas,
+                cantidad_gallinas=cantidad_efectiva,
                 descartes=descartes,
                 observaciones=obs if obs else None
             )
             self.cargar_poblacion_actual()
 
-            messagebox.showinfo("Éxito", f"Población registrada: {cant_gallinas} gallinas")
+            messagebox.showinfo(
+                "Éxito",
+                f"Descarte registrado: {descartes} gallinas\n"
+                f"Población anterior: {cant_gallinas}\n"
+                f"Población actual: {cantidad_efectiva}"
+            )
 
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -471,11 +481,14 @@ class ProduccionModule:
             poblacion_actual = self.gallinas_repo.obtener_poblacion_actual()
             cantidad = poblacion_actual.get('cantidad_gallinas', 0)
 
-            # Actualizar campo
             self.cant_gallinas_entry.delete(0, "end")
             self.cant_gallinas_entry.insert(0, str(cantidad))
 
-            # Mostrar info visual
+            # Limpiar descartes y observaciones para el siguiente registro
+            self.descartes_entry.delete(0, "end")
+            self.descartes_entry.insert(0, "0")
+            self.obs_gallinas_entry.delete(0, "end")
+
             self.label_poblacion_actual.configure(
                 text=f"🐔 Población actual: {cantidad} gallinas"
             )
