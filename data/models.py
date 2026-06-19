@@ -34,7 +34,7 @@ class ProduccionRepository:
         """
         return self.db.execute_insert(query, (
             fecha, hora, tipo_c, tipo_b, tipo_a, tipo_aa, tipo_aaa, tipo_jumbo, observaciones
-        ))
+        ))    
     
     def obtener_produccion_por_fecha(self, fecha_inicio: date, fecha_fin: date) -> List[Dict]:
         """Obtiene la producción entre dos fechas"""
@@ -534,6 +534,39 @@ class InsumosRepository:
         """
         result = self.db.execute_query(query, (trabajador_id, fecha_inicio, fecha_fin))
         return result[0]['total'] if result else 0
+    
+    def obtener_stock_alimento_unificado(self) -> dict:
+        query = """
+            SELECT si.insumo_id, i.nombre, i.unidad, si.cantidad_actual, i.fecha_compra
+            FROM stock_insumos si
+            JOIN insumos i ON si.insumo_id = i.id
+            WHERE i.categoria = 'Alimento' AND si.cantidad_actual > 0
+            ORDER BY i.fecha_compra ASC
+        """
+        lotes = self.db.execute_query(query)
+        total = sum(l['cantidad_actual'] for l in lotes)
+        return {'total': total, 'lotes': lotes}
+
+    def descontar_cuido_unificado(self, cantidad_a_descontar: float, motivo: str = None) -> bool:
+        data = self.obtener_stock_alimento_unificado()
+        if data['total'] < cantidad_a_descontar:
+            return False
+
+        restante = cantidad_a_descontar
+        for lote in data['lotes']:
+            if restante <= 0:
+                break
+            a_usar = min(lote['cantidad_actual'], restante)
+            self.db.execute_update(
+                "UPDATE stock_insumos SET cantidad_actual = cantidad_actual - ?, updated_at = CURRENT_TIMESTAMP WHERE insumo_id = ?",
+                (a_usar, lote['insumo_id'])
+            )
+            self.db.execute_insert(
+                "INSERT INTO movimientos_insumos (fecha, hora, insumo_id, tipo_movimiento, cantidad, motivo) VALUES (date('now'), time('now'), ?, 'salida', ?, ?)",
+                (lote['insumo_id'], a_usar, motivo or 'Consumo diario cuido')
+            )
+            restante -= a_usar
+        return True
 
 class ReportesRepository:
     """Repositorio para generar reportes y análisis"""
@@ -708,20 +741,27 @@ class GallinasRepository:
     def __init__(self, db):
         self.db = db
     
-    def registrar_poblacion(self, fecha: date, hora: str, cantidad_gallinas: int, 
-                           descartes: int = 0, observaciones: str = None) -> int:
-        """Registra la población de gallinas"""
+    def registrar_poblacion(self, fecha, hora, cantidad_gallinas, descartes=0, observaciones=None):
         query = """
             INSERT INTO poblacion_gallinas (fecha, hora, cantidad_gallinas, descartes, observaciones)
             VALUES (?, ?, ?, ?, ?)
         """
-        return self.db.execute_insert(query, (fecha, hora, cantidad_gallinas, descartes, observaciones))
+        result = self.db.execute_insert(query, (fecha, hora, cantidad_gallinas, descartes, observaciones))
+        
+        # TEST TEMPORAL
+        verificacion = self.db.execute_query(
+            "SELECT * FROM poblacion_gallinas ORDER BY id DESC LIMIT 3"
+        )
+        print("ÚLTIMOS 3 REGISTROS TRAS INSERT:")
+        for r in verificacion:
+            print(r)
+        
+        return result
     
     def obtener_poblacion_actual(self) -> Dict:
-        """Obtiene el último registro de población"""
         query = """
             SELECT * FROM poblacion_gallinas 
-            ORDER BY fecha DESC, hora DESC 
+            ORDER BY id DESC
             LIMIT 1
         """
         result = self.db.execute_query(query)
