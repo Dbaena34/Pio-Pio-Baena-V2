@@ -18,6 +18,96 @@ class Database:
         self.db_path = db_path
         self._ensure_data_directory()
         self.init_db()
+        self._run_migrations()  # ← añadir
+        
+    def _run_migrations(self):
+        """
+        Aplica migraciones necesarias a la BD existente.
+        Se ejecuta en cada inicio pero solo hace cambios si son necesarios.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Migración 1: Corregir CHECK constraint de insumos (Canstillas → Canastillas)
+            cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='insumos'")
+            row = cursor.fetchone()
+            if row and 'Canstillas' in row[0]:
+                conn.executescript("""
+                    PRAGMA foreign_keys=OFF;
+                    CREATE TABLE insumos_nueva (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nombre TEXT NOT NULL,
+                        categoria TEXT NOT NULL CHECK(categoria IN ('Alimento', 'Medicamento', 'Mantenimiento', 'Canastillas','Otros')),
+                        cantidad REAL NOT NULL,
+                        unidad TEXT NOT NULL CHECK(unidad IN ('kg', 'bultos', 'litros', 'unidades')),
+                        costo_unitario REAL NOT NULL,
+                        costo_total REAL NOT NULL,
+                        fecha_compra DATE NOT NULL,
+                        proveedor TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                    INSERT INTO insumos_nueva SELECT * FROM insumos;
+                    DROP TABLE insumos;
+                    ALTER TABLE insumos_nueva RENAME TO insumos;
+                    PRAGMA foreign_keys=ON;
+                """)
+                print("✅ Migración 1: tabla insumos corregida")
+
+            # Migración 2: Consolidar stock_insumos por nombre
+            cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='stock_insumos'")
+            row = cursor.fetchone()
+            if row and 'insumo_id' in row[0]:
+                conn.executescript("""
+                    CREATE TABLE stock_insumos_nueva (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nombre TEXT NOT NULL UNIQUE,
+                        categoria TEXT NOT NULL,
+                        unidad TEXT NOT NULL,
+                        cantidad_actual REAL NOT NULL DEFAULT 0,
+                        stock_minimo REAL DEFAULT 0,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                    INSERT OR IGNORE INTO stock_insumos_nueva (nombre, categoria, unidad, cantidad_actual, stock_minimo)
+                    SELECT i.nombre, i.categoria, i.unidad,
+                        SUM(si.cantidad_actual), MAX(si.stock_minimo)
+                    FROM stock_insumos si
+                    JOIN insumos i ON si.insumo_id = i.id
+                    GROUP BY i.nombre, i.categoria, i.unidad;
+                    DROP TABLE stock_insumos;
+                    ALTER TABLE stock_insumos_nueva RENAME TO stock_insumos;
+                """)
+                print("✅ Migración 2: stock_insumos consolidado")
+
+            # Migración 3: Trigger correcto para register_egreso_after_insumo
+            cursor.execute("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='register_egreso_after_insumo'")
+            row = cursor.fetchone()
+            if not row or 'insumo_id' in row[0]:
+                conn.executescript("""
+                    DROP TRIGGER IF EXISTS register_egreso_after_insumo;
+                    CREATE TRIGGER register_egreso_after_insumo
+                    AFTER INSERT ON insumos
+                    BEGIN
+                        INSERT INTO movimientos_financieros (fecha, tipo, categoria, monto, descripcion, referencia_id, referencia_tabla)
+                        VALUES (
+                            NEW.fecha_compra, 'egreso', 'Compra de ' || NEW.categoria,
+                            NEW.costo_total,
+                            NEW.nombre || ' - ' || NEW.cantidad || ' ' || NEW.unidad,
+                            NEW.id, 'insumos'
+                        );
+                        INSERT INTO stock_insumos (nombre, categoria, unidad, cantidad_actual, stock_minimo)
+                        SELECT NEW.nombre, NEW.categoria, NEW.unidad, NEW.cantidad, 0
+                        WHERE NOT EXISTS (SELECT 1 FROM stock_insumos WHERE nombre = NEW.nombre);
+                        UPDATE stock_insumos
+                        SET cantidad_actual = cantidad_actual + NEW.cantidad,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE nombre = NEW.nombre;
+                    END;
+                """)
+                print("✅ Migración 3: trigger register_egreso_after_insumo corregido")
+
+            # Migración 4: PRAGMA WAL
+            cursor.execute("PRAGMA journal_mode=WAL")
+            
     
     def _ensure_data_directory(self):
         """Crea el directorio 'data' si no existe"""
