@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 env/
+*.ipynb
 
 # Bases de Datos y Configuración
 *.sqlite3
