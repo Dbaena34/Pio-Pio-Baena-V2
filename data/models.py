@@ -75,7 +75,6 @@ class StockRepository:
         self.db = db
     
     def obtener_stock_actual(self) -> Dict:
-        """Obtiene el stock actual de huevos"""
         query = "SELECT * FROM stock_huevos WHERE id = 1"
         result = self.db.execute_query(query)
         return result[0] if result else {}
@@ -84,10 +83,6 @@ class StockRepository:
                             tipo_a: int = 0, tipo_aa: int = 0,
                             tipo_aaa: int = 0, tipo_jumbo: int = 0,
                             razon: str = "Ajuste manual") -> int:
-        """
-        Ajusta el stock manualmente (para mermas, roturas, etc.)
-        Valores negativos descuentan, positivos suman.
-        """
         query = """
             UPDATE stock_huevos 
             SET tipo_c = tipo_c + ?,
@@ -102,57 +97,52 @@ class StockRepository:
         return self.db.execute_update(query, (tipo_c, tipo_b, tipo_a, tipo_aa, tipo_aaa, tipo_jumbo))
     
     def obtener_stock_insumos(self) -> List[Dict]:
-        """Obtiene el stock de todos los insumos"""
         query = """
             SELECT 
-                si.id,
-                si.insumo_id,
-                i.nombre,
-                i.categoria,
-                i.unidad,
-                si.cantidad_actual,
-                si.stock_minimo,
+                id,
+                nombre,
+                categoria,
+                unidad,
+                cantidad_actual,
+                stock_minimo,
                 CASE 
-                    WHEN si.cantidad_actual <= si.stock_minimo THEN 1
+                    WHEN cantidad_actual <= stock_minimo THEN 1
                     ELSE 0
                 END as alerta_stock
-            FROM stock_insumos si
-            JOIN insumos i ON si.insumo_id = i.id
-            ORDER BY i.categoria, i.nombre
+            FROM stock_insumos
+            ORDER BY categoria, nombre
         """
         return self.db.execute_query(query)
     
     def obtener_alertas_stock(self) -> List[Dict]:
-        """Obtiene insumos con stock bajo"""
         query = """
-            SELECT 
-                si.id,
-                i.nombre,
-                i.categoria,
-                si.cantidad_actual,
-                si.stock_minimo,
-                i.unidad
-            FROM stock_insumos si
-            JOIN insumos i ON si.insumo_id = i.id
-            WHERE si.cantidad_actual <= si.stock_minimo
-            ORDER BY i.categoria, i.nombre
+            SELECT id, nombre, categoria, cantidad_actual, stock_minimo, unidad
+            FROM stock_insumos
+            WHERE cantidad_actual <= stock_minimo
+            ORDER BY categoria, nombre
         """
         return self.db.execute_query(query)
+    
+    def registrar_consumo_insumo(self, nombre: str, cantidad: float, motivo: str = None) -> int:
+        query_update = """
+            UPDATE stock_insumos 
+            SET cantidad_actual = cantidad_actual - ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE nombre = ?
+        """
+        self.db.execute_update(query_update, (cantidad, nombre))
+        query_insert = """
+            INSERT INTO movimientos_insumos (fecha, hora, insumo_id, tipo_movimiento, cantidad, motivo)
+            SELECT date('now'), time('now'), 
+                (SELECT id FROM insumos WHERE nombre = ? ORDER BY id DESC LIMIT 1),
+                'salida', ?, ?
+        """
+        return self.db.execute_insert(query_insert, (nombre, cantidad, motivo))
     
     def registrar_ajuste_huevos(self, tipo_ajuste: str, tipo_c: int = 0, tipo_b: int = 0,
                                 tipo_a: int = 0, tipo_aa: int = 0, tipo_aaa: int = 0,
                                 tipo_jumbo: int = 0, motivo: str = None) -> int:
-        """
-        Registra un ajuste de stock de huevos y lo aplica.
-        
-        Args:
-            tipo_ajuste: 'merma' o 'correccion'
-            Los valores pueden ser positivos (corrección al alza) o negativos (mermas)
-        """
-        # Primero ajustar el stock
         self.ajustar_stock_manual(tipo_c, tipo_b, tipo_a, tipo_aa, tipo_aaa, tipo_jumbo, motivo)
-        
-        # Registrar el ajuste en una tabla de historial
         query = """
             INSERT INTO ajustes_stock_huevos 
             (fecha, hora, tipo_ajuste, tipo_c, tipo_b, tipo_a, tipo_aa, tipo_aaa, tipo_jumbo, motivo)
@@ -161,7 +151,6 @@ class StockRepository:
         return self.db.execute_insert(query, (tipo_ajuste, tipo_c, tipo_b, tipo_a, tipo_aa, tipo_aaa, tipo_jumbo, motivo))
     
     def obtener_historial_ajustes_huevos(self, fecha_inicio: date, fecha_fin: date) -> List[Dict]:
-        """Obtiene el historial de ajustes de stock de huevos"""
         query = """
             SELECT * FROM ajustes_stock_huevos
             WHERE fecha BETWEEN ? AND ?
@@ -169,60 +158,39 @@ class StockRepository:
         """
         return self.db.execute_query(query, (fecha_inicio, fecha_fin))
     
-    def registrar_consumo_insumo(self, insumo_id: int, cantidad: float, motivo: str = None) -> int:
-        """
-        Registra un consumo/salida de insumo y descuenta del stock.
-        Cantidad debe ser positiva (se descuenta automáticamente).
-        """
-        # Descontar del stock
-        query_update = """
-            UPDATE stock_insumos 
-            SET cantidad_actual = cantidad_actual - ?
-            WHERE insumo_id = ?
-        """
-        self.db.execute_update(query_update, (cantidad, insumo_id))
-        
-        # Registrar el movimiento
-        query_insert = """
-            INSERT INTO movimientos_insumos 
-            (fecha, hora, insumo_id, tipo_movimiento, cantidad, motivo)
-            VALUES (date('now'), time('now'), ?, 'salida', ?, ?)
-        """
-        return self.db.execute_insert(query_insert, (insumo_id, cantidad, motivo))
-    
     def obtener_historial_movimientos_insumos(self, fecha_inicio: date, fecha_fin: date) -> List[Dict]:
-        """Obtiene el historial de movimientos de insumos"""
         query = """
             SELECT 
-                m.*,
-                i.nombre as insumo_nombre,
-                i.categoria,
-                i.unidad
-            FROM movimientos_insumos m
-            JOIN insumos i ON m.insumo_id = i.id
-            WHERE m.fecha BETWEEN ? AND ?
-            ORDER BY m.fecha DESC, m.hora DESC
+                mi.fecha, mi.hora, mi.tipo_movimiento, mi.cantidad, mi.motivo,
+                i.nombre as insumo_nombre, i.categoria, i.unidad,
+                ca.cantidad_gallinas, ca.consumo_por_gallina
+            FROM movimientos_insumos mi
+            JOIN insumos i ON mi.insumo_id = i.id
+            LEFT JOIN consumo_alimento ca 
+                ON mi.fecha = ca.fecha 
+                AND i.categoria = 'Alimento'
+                AND mi.motivo LIKE 'Cuido diario%'
+            WHERE mi.fecha BETWEEN ? AND ?
+            ORDER BY mi.fecha DESC, mi.hora DESC
         """
         return self.db.execute_query(query, (fecha_inicio, fecha_fin))
     
-    def ajustar_stock_insumo(self, insumo_id: int, nueva_cantidad: float, motivo: str = "Ajuste manual") -> int:
-        """Ajusta el stock de un insumo a una cantidad específica"""
+    def ajustar_stock_insumo(self, nombre: str, nueva_cantidad: float, motivo: str = "Ajuste manual") -> int:
         query = """
-            UPDATE stock_insumos 
+            UPDATE stock_insumos
             SET cantidad_actual = ?,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE insumo_id = ?
+            WHERE nombre = ?
         """
-        return self.db.execute_update(query, (nueva_cantidad, insumo_id))
+        return self.db.execute_update(query, (nueva_cantidad, nombre))
     
-    def actualizar_stock_minimo(self, insumo_id: int, stock_minimo: float) -> int:
-        """Actualiza el stock mínimo de un insumo"""
+    def actualizar_stock_minimo(self, nombre: str, stock_minimo: float) -> int:
         query = """
             UPDATE stock_insumos 
             SET stock_minimo = ?
-            WHERE insumo_id = ?
+            WHERE nombre = ?
         """
-        return self.db.execute_update(query, (stock_minimo, insumo_id))
+        return self.db.execute_update(query, (stock_minimo, nombre))
 
 
 class ClientesRepository:
@@ -537,11 +505,10 @@ class InsumosRepository:
     
     def obtener_stock_alimento_unificado(self) -> dict:
         query = """
-            SELECT si.insumo_id, i.nombre, i.unidad, si.cantidad_actual, i.fecha_compra
-            FROM stock_insumos si
-            JOIN insumos i ON si.insumo_id = i.id
-            WHERE i.categoria = 'Alimento' AND si.cantidad_actual > 0
-            ORDER BY i.fecha_compra ASC
+            SELECT nombre, unidad, cantidad_actual
+            FROM stock_insumos
+            WHERE categoria = 'Alimento' AND cantidad_actual > 0
+            ORDER BY nombre
         """
         lotes = self.db.execute_query(query)
         total = sum(l['cantidad_actual'] for l in lotes)
@@ -558,16 +525,41 @@ class InsumosRepository:
                 break
             a_usar = min(lote['cantidad_actual'], restante)
             self.db.execute_update(
-                "UPDATE stock_insumos SET cantidad_actual = cantidad_actual - ?, updated_at = CURRENT_TIMESTAMP WHERE insumo_id = ?",
-                (a_usar, lote['insumo_id'])
+                "UPDATE stock_insumos SET cantidad_actual = cantidad_actual - ?, updated_at = CURRENT_TIMESTAMP WHERE nombre = ?",
+                (a_usar, lote['nombre'])
             )
+            ahora = datetime.now()
             self.db.execute_insert(
-                "INSERT INTO movimientos_insumos (fecha, hora, insumo_id, tipo_movimiento, cantidad, motivo) VALUES (date('now'), time('now'), ?, 'salida', ?, ?)",
-                (lote['insumo_id'], a_usar, motivo or 'Consumo diario cuido')
+                "INSERT INTO movimientos_insumos (fecha, hora, insumo_id, tipo_movimiento, cantidad, motivo) VALUES (?, ?, (SELECT id FROM insumos WHERE nombre = ? ORDER BY id DESC LIMIT 1), 'salida', ?, ?)",
+                (ahora.strftime("%Y-%m-%d"), ahora.strftime("%H:%M:%S"), lote['nombre'], a_usar, motivo or 'Consumo diario cuido')
             )
             restante -= a_usar
         return True
+    
+    def obtener_stock_canastillas(self) -> dict:
+        query = """
+            SELECT COALESCE(cantidad_actual, 0) as total
+            FROM stock_insumos
+            WHERE nombre = 'Canastillas'
+        """
+        result = self.db.execute_query(query)
+        return result[0] if result else {'total': 0}
 
+    def descontar_canastillas(self, cantidad: float, motivo: str = None) -> bool:
+        stock = self.obtener_stock_canastillas()
+        if stock['total'] < cantidad:
+            return False
+        self.db.execute_update(
+            "UPDATE stock_insumos SET cantidad_actual = cantidad_actual - ?, updated_at = CURRENT_TIMESTAMP WHERE nombre = 'Canastillas'",
+            (cantidad,)
+        )
+        ahora = datetime.now()
+        self.db.execute_insert(
+            "INSERT INTO movimientos_insumos (fecha, hora, insumo_id, tipo_movimiento, cantidad, motivo) VALUES (?, ?, (SELECT id FROM insumos WHERE nombre = 'Canastillas' ORDER BY id DESC LIMIT 1), 'salida', ?, ?)",
+            (ahora.strftime("%Y-%m-%d"), ahora.strftime("%H:%M:%S"), cantidad, motivo or 'Despacho pedido')
+        )
+        return True
+    
 class ReportesRepository:
     """Repositorio para generar reportes y análisis"""
     
