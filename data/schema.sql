@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS despachos (
 CREATE TABLE IF NOT EXISTS insumos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
-    categoria TEXT NOT NULL CHECK(categoria IN ('Alimento', 'Medicamento', 'Mantenimiento', 'Canstillas','Otros')),
+    categoria TEXT NOT NULL CHECK(categoria IN ('Alimento', 'Medicamento', 'Mantenimiento', 'Canastillas','Otros')),
     cantidad REAL NOT NULL,
     unidad TEXT NOT NULL CHECK(unidad IN ('kg', 'bultos', 'litros', 'unidades')),
     costo_unitario REAL NOT NULL,
@@ -142,11 +142,12 @@ CREATE TABLE IF NOT EXISTS insumos (
 -- Tabla de stock de insumos
 CREATE TABLE IF NOT EXISTS stock_insumos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    insumo_id INTEGER NOT NULL,
-    cantidad_actual REAL NOT NULL,
+    nombre TEXT NOT NULL UNIQUE,
+    categoria TEXT NOT NULL,
+    unidad TEXT NOT NULL,
+    cantidad_actual REAL NOT NULL DEFAULT 0,
     stock_minimo REAL DEFAULT 0,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (insumo_id) REFERENCES insumos(id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabla de pagos a trabajadores
@@ -251,30 +252,6 @@ BEGIN
     WHERE p.id = NEW.pedido_id;
 END;
 
--- Trigger: Registrar egreso cuando se compra insumo
-CREATE TRIGGER IF NOT EXISTS register_egreso_after_insumo
-AFTER INSERT ON insumos
-BEGIN
-    INSERT INTO movimientos_financieros (fecha, tipo, categoria, monto, descripcion, referencia_id, referencia_tabla)
-    VALUES (
-        NEW.fecha_compra,
-        'egreso',
-        'Compra de ' || NEW.categoria,
-        NEW.costo_total,
-        NEW.nombre || ' - ' || NEW.cantidad || ' ' || NEW.unidad,
-        NEW.id,
-        'insumos'
-    );
-    
-    -- Actualizar o crear registro en stock_insumos
-    INSERT OR REPLACE INTO stock_insumos (id, insumo_id, cantidad_actual, stock_minimo)
-    VALUES (
-        (SELECT id FROM stock_insumos WHERE insumo_id = NEW.id),
-        NEW.id,
-        COALESCE((SELECT cantidad_actual FROM stock_insumos WHERE insumo_id = NEW.id), 0) + NEW.cantidad,
-        COALESCE((SELECT stock_minimo FROM stock_insumos WHERE insumo_id = NEW.id), 0)
-    );
-END;
 
 -- Trigger: Registrar egreso cuando se paga a trabajador
 CREATE TRIGGER IF NOT EXISTS register_egreso_after_pago
@@ -331,6 +308,32 @@ CREATE TABLE IF NOT EXISTS movimientos_insumos (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (insumo_id) REFERENCES insumos(id)
 );
+
+-- Trigger: Registrar egreso cuando se compra insumo
+CREATE TRIGGER IF NOT EXISTS register_egreso_after_insumo
+AFTER INSERT ON insumos
+BEGIN
+    INSERT INTO movimientos_financieros (fecha, tipo, categoria, monto, descripcion, referencia_id, referencia_tabla)
+    VALUES (
+        NEW.fecha_compra,
+        'egreso',
+        'Compra de ' || NEW.categoria,
+        NEW.costo_total,
+        NEW.nombre || ' - ' || NEW.cantidad || ' ' || NEW.unidad,
+        NEW.id,
+        'insumos'
+    );
+
+    INSERT INTO stock_insumos (nombre, categoria, unidad, cantidad_actual, stock_minimo)
+    SELECT NEW.nombre, NEW.categoria, NEW.unidad, NEW.cantidad, 0
+    WHERE NOT EXISTS (SELECT 1 FROM stock_insumos WHERE nombre = NEW.nombre);
+
+    UPDATE stock_insumos
+    SET cantidad_actual = cantidad_actual + NEW.cantidad,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE nombre = NEW.nombre;
+END;
+
 
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_ajustes_fecha ON ajustes_stock_huevos(fecha);
