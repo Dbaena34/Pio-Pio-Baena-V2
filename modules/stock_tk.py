@@ -713,6 +713,7 @@ class StockModule:
     def cargar_insumos(self):
         try:
             stock_insumos = self.stock_repo.obtener_stock_insumos()
+            #print("STOCK INSUMOS:", stock_insumos)
 
             if not stock_insumos:
                 messagebox.showinfo("Info", "No hay insumos registrados en el sistema")
@@ -754,7 +755,8 @@ class StockModule:
                 f"{row['nombre']} — Stock: {row['cantidad_actual']} {row['unidad']}"
                 for _, row in df.iterrows()
             ]
-            ids = df['insumo_id'].tolist()
+            # DESPUÉS
+            ids = df['id'].tolist()
             self._insumo_ids = ids
             self._insumo_opciones = opciones
 
@@ -801,7 +803,7 @@ class StockModule:
         try:
             idx = self._insumo_opciones.index(opcion_str)
             insumo_id = self._insumo_ids[idx]
-            row = self._df_insumos[self._df_insumos['insumo_id'] == insumo_id]
+            row = self._df_insumos[self._df_insumos['id'] == insumo_id]
             return row.iloc[0] if not row.empty else None
         except (ValueError, IndexError):
             return None
@@ -879,7 +881,7 @@ class StockModule:
                 return
 
             self.stock_repo.registrar_consumo_insumo(
-                insumo_id=data['insumo_id'],
+                nombre=data['nombre'],
                 cantidad=cantidad,
                 motivo=motivo if motivo else None
             )
@@ -906,7 +908,7 @@ class StockModule:
             motivo = self.ajuste_ins_motivo_entry.get().strip()
 
             self.stock_repo.ajustar_stock_insumo(
-                insumo_id=data['insumo_id'],
+                nombre=data['nombre'],
                 nueva_cantidad=nueva_cantidad,
                 motivo=motivo if motivo else "Ajuste manual"
             )
@@ -928,8 +930,9 @@ class StockModule:
         try:
             nuevo_minimo = float(self.minimo_ins_entry.get() or 0)
 
+            # guardar_minimo_insumo
             self.stock_repo.actualizar_stock_minimo(
-                insumo_id=data['insumo_id'],
+                nombre=data['nombre'],
                 stock_minimo=nuevo_minimo
             )
 

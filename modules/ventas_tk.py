@@ -15,8 +15,7 @@ import sys
 sys.path.append('..')
 
 from data.database import db
-from data.models import PedidosRepository, ClientesRepository, PreciosRepository, StockRepository
-
+from data.models import PedidosRepository, ClientesRepository, PreciosRepository, StockRepository, InsumosRepository
 
 class VentasModule:
 
@@ -26,6 +25,7 @@ class VentasModule:
         self.clientes_repo = ClientesRepository(db)
         self.precios_repo = PreciosRepository(db)
         self.stock_repo = StockRepository(db)
+        self.insumos_repo = InsumosRepository(db)
         self.categorias = ['C', 'B', 'A', 'AA', 'AAA', 'Jumbo']
         self.categorias_db = ['canastillas_c', 'canastillas_b', 'canastillas_a',
                               'canastillas_aa', 'canastillas_aaa', 'canastillas_jumbo']
@@ -417,6 +417,18 @@ class VentasModule:
             )
 
             if tipo == 'despachar_ahora':
+                total_canastillas = sum(cantidades.values())
+
+                stock_info = self.insumos_repo.obtener_stock_canastillas()
+                if stock_info['total'] < total_canastillas:
+                    messagebox.showerror(
+                        "❌ Sin canastillas",
+                        f"Stock disponible: {int(stock_info['total'])} canastillas\n"
+                        f"Requeridas: {total_canastillas}\n\n"
+                        "Registra una compra de canastillas en Insumos y Pagos."
+                    )
+                    return
+
                 self.pedidos_repo.despachar_pedido(
                     pedido_id=pedido_id,
                     fecha=fecha,
@@ -429,6 +441,12 @@ class VentasModule:
                     canastillas_jumbo=cantidades['Jumbo'],
                     observaciones="Despacho inmediato"
                 )
+
+                self.insumos_repo.descontar_canastillas(
+                    cantidad=total_canastillas,
+                    motivo=f"Despacho pedido #{pedido_id}"
+                )
+
                 messagebox.showinfo("Éxito",
                     f"✅ Pedido #{pedido_id} creado y despachado exitosamente")
             else:
@@ -618,6 +636,21 @@ class VentasModule:
                 f"¿Despachar pedido #{pedido['id']} de {pedido['cliente_nombre']}?"):
             return
         try:
+            total_canastillas = (
+                pedido['canastillas_c'] + pedido['canastillas_b'] + pedido['canastillas_a'] +
+                pedido['canastillas_aa'] + pedido['canastillas_aaa'] + pedido['canastillas_jumbo']
+            )
+
+            stock_info = self.insumos_repo.obtener_stock_canastillas()
+            if stock_info['total'] < total_canastillas:
+                messagebox.showerror(
+                    "❌ Sin canastillas",
+                    f"Stock disponible: {int(stock_info['total'])} canastillas\n"
+                    f"Requeridas: {total_canastillas}\n\n"
+                    "Registra una compra de canastillas en Insumos y Pagos."
+                )
+                return
+
             self.pedidos_repo.despachar_pedido(
                 pedido_id=pedido['id'],
                 fecha=date.today(),
@@ -630,6 +663,12 @@ class VentasModule:
                 canastillas_jumbo=pedido['canastillas_jumbo'],
                 observaciones="Despachado"
             )
+
+            self.insumos_repo.descontar_canastillas(
+                cantidad=total_canastillas,
+                motivo=f"Despacho pedido #{pedido['id']}"
+            )
+
             messagebox.showinfo("Éxito", f"✅ Pedido #{pedido['id']} despachado exitosamente")
             self._cargar_pedidos_pendientes()
         except Exception as e:

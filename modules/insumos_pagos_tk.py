@@ -113,9 +113,6 @@ class InsumosPagosModule:
         ctk.CTkLabel(row2, text="Categoría *", font=util.font_label()).grid(
             row=0, column=1, sticky="w")
 
-        self.compra_nombre = ctk.CTkEntry(row2, font=util.font_input(), height=36,
-                                          placeholder_text="Ej: Alimento concentrado, Vitaminas...")
-        self.compra_nombre.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
 
         self.compra_cat_var = ctk.StringVar(value="Alimento")
         self.compra_cat_combo = ttk.Combobox(
@@ -124,6 +121,12 @@ class InsumosPagosModule:
             values=['Alimento', 'Medicamento', 'Mantenimiento', 'Canastillas', 'Otros']
         )
         self.compra_cat_combo.grid(row=1, column=1, sticky="ew", pady=4)
+        self.compra_cat_combo.bind("<<ComboboxSelected>>", lambda e: self._actualizar_opciones_nombre())
+        
+        self.compra_nombre = ttk.Combobox(row2, font=("Arial", 13))
+        self.compra_nombre.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
+        self._actualizar_opciones_nombre()
+
 
         # Fila 3: cantidad + unidad
         row3 = ctk.CTkFrame(inner, fg_color="transparent")
@@ -242,6 +245,22 @@ class InsumosPagosModule:
 
         self._cargar_historial_compras()
 
+    def _actualizar_opciones_nombre(self):
+        opciones_por_categoria = {
+            'Alimento': ['Cuido'],
+            'Canastillas': ['Canastillas'],
+            'Medicamento': [],
+            'Mantenimiento': [],
+            'Otros': []
+        }
+        cat = self.compra_cat_var.get()
+        opciones = opciones_por_categoria.get(cat, [])
+        self.compra_nombre['values'] = opciones
+        if opciones:
+            self.compra_nombre.set(opciones[0])
+        else:
+            self.compra_nombre.set("")
+    
     def _calcular_costo_total_compra(self):
         try:
             cant = safe_float(self.compra_cantidad.get())
