@@ -3,3 +3,5 @@ tkcalendar
 matplotlib
 pandas
 numpy
+pillow
+openpyxl
