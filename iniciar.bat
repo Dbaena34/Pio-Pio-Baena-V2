@@ -19,6 +19,12 @@ if not exist ".venv\Scripts\python.exe" (
 
 call .venv\Scripts\activate.bat
 
+REM ── AUTO-ACTUALIZACION ──────────────────────────────────────────────────────
+python updater.py
+echo ────────────────────────────────────────
+echo.
+
+REM ── INICIO DE LA APLICACION ─────────────────────────────────────────────────
 echo Iniciando aplicacion...
 echo.
 
