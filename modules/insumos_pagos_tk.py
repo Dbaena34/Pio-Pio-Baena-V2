@@ -244,6 +244,7 @@ class InsumosPagosModule:
         ).pack(pady=(10, 0))
 
         self._cargar_historial_compras()
+        
 
     def _actualizar_opciones_nombre(self):
         opciones_por_categoria = {
@@ -318,6 +319,8 @@ class InsumosPagosModule:
             self.compra_costo_total.insert(0, "0")
             self.label_compra_resumen.configure(text="")
             self._cargar_historial_compras()
+            self.parent.winfo_toplevel().actualizar_alertas()
+
 
         except Exception as e:
             messagebox.showerror("Error", str(e))
