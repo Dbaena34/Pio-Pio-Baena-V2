@@ -2,16 +2,19 @@
 Módulo de Stock - CustomTkinter
 Gestiona el stock de huevos e insumos, ajustes y movimientos
 """
+import csv
+import sys
+import pandas as pd
+import customtkinter as ctk
+import matplotlib.pyplot as plt
 from utils import config as util
 from tkcalendar import DateEntry
-import customtkinter as ctk
 from tkinter import ttk, messagebox, filedialog
 from datetime import datetime, date, timedelta
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-import pandas as pd
-import csv
-import sys
+
+
+
 sys.path.append('..')
 
 from data.database import db
@@ -475,11 +478,36 @@ class StockModule:
         ).pack(anchor="w", pady=(0, 8))
 
         # Tabla de insumos
-        cols_ins = ("Insumo", "Categoría", "Stock Actual", "Stock Mínimo", "Unidad")
-        self.tree_insumos = ttk.Treeview(inner_inv, columns=cols_ins, show="headings", height=8)
+        cols_ins = ("Estado","Insumo","Categoría","Stock Actual","Stock Mínimo","Unidad")
+
+        self.tree_insumos = ttk.Treeview(inner_inv,columns=cols_ins,show="headings",height=8)
+
         for col in cols_ins:
             self.tree_insumos.heading(col, text=col)
-            self.tree_insumos.column(col, anchor="center", width=130)
+
+        self.tree_insumos.column("Estado", width=100, anchor="center")
+        self.tree_insumos.column("Insumo", width=180, anchor="center")
+        self.tree_insumos.column("Categoría", width=150, anchor="center")
+        self.tree_insumos.column("Stock Actual", width=110, anchor="center")
+        self.tree_insumos.column("Stock Mínimo", width=110, anchor="center")
+        self.tree_insumos.column("Unidad", width=90, anchor="center")
+
+        # Colores de las filas
+        self.tree_insumos.tag_configure(
+            "normal",
+            background="#ffffff"
+        )
+
+        self.tree_insumos.tag_configure(
+            "bajo",
+            background="#fff4cc"
+        )
+
+        self.tree_insumos.tag_configure(
+            "critico",
+            background="#ffd6d6"
+        )
+
         self.tree_insumos.pack(fill="x")
 
         ctk.CTkButton(
@@ -722,16 +750,71 @@ class StockModule:
             self._df_insumos = pd.DataFrame(stock_insumos)
             df = self._df_insumos
 
-            # Alertas de stock bajo
-            alertas = [item for item in stock_insumos if item.get('alerta_stock', 0) == 1]
-            if alertas:
-                textos = [f"🔴 {a['nombre']} ({a['categoria']}): {a['cantidad_actual']} {a['unidad']} — Mín: {a['stock_minimo']}"
-                          for a in alertas]
-                self.label_alertas.configure(
-                    text=f"⚠️ {len(alertas)} insumo(s) con stock bajo:\n" + "\n".join(textos)
+            # ==========================================================
+            # ALERTAS DE INVENTARIO
+            # ==========================================================
+
+            criticos = []
+            bajos = []
+
+            for item in stock_insumos:
+
+                stock = float(item["cantidad_actual"])
+                minimo = float(item["stock_minimo"])
+
+                # Si el mínimo es 0, nunca genera alertas
+                if minimo <= 0:
+                    continue
+
+                if stock <= minimo:
+
+                    criticos.append(
+                        f"🔴 {item['nombre']}\n"
+                        f"     Stock: {stock} {item['unidad']}\n"
+                        f"     Mínimo: {minimo} {item['unidad']}"
+                    )
+
+                elif stock <= minimo * 1.30:
+
+                    bajos.append(
+                        f"🟡 {item['nombre']}\n"
+                        f"     Stock: {stock} {item['unidad']}\n"
+                        f"     Mínimo: {minimo} {item['unidad']}"
+                    )
+
+            # Construcción del texto de la tarjeta
+            texto_alerta = ""
+
+            if criticos:
+
+                texto_alerta += (
+                    f"🔴 STOCK CRÍTICO ({len(criticos)})\n\n"
+                    + "\n\n".join(criticos)
                 )
-                self.card_alertas.pack(fill="x", pady=(0, 6), padx=20)
+
+            if bajos:
+
+                if texto_alerta:
+                    texto_alerta += "\n\n────────────────────\n\n"
+
+                texto_alerta += (
+                    f"🟡 STOCK BAJO ({len(bajos)})\n\n"
+                    + "\n\n".join(bajos)
+                )
+
+            # Mostrar u ocultar la tarjeta
+            if texto_alerta:
+
+                self.label_alertas.configure(text=texto_alerta)
+
+                self.card_alertas.pack(
+                    fill="x",
+                    pady=(0, 6),
+                    padx=20
+                )
+
             else:
+
                 self.card_alertas.pack_forget()
 
             # Llenar tabla
@@ -739,13 +822,36 @@ class StockModule:
                 self.tree_insumos.delete(i)
 
             for _, row in df.iterrows():
-                self.tree_insumos.insert("", "end", values=(
-                    row.get("nombre"),
-                    row.get("categoria"),
-                    row.get("cantidad_actual"),
-                    row.get("stock_minimo"),
-                    row.get("unidad")
-                ))
+                stock = float(row["cantidad_actual"])
+                minimo = float(row["stock_minimo"])
+
+                if minimo > 0 and stock <= minimo:
+                    estado = "🔴 Crítico"
+                    tag = "critico"
+
+                elif minimo > 0 and stock <= minimo * 1.30:
+                    estado = "🟡 Bajo"
+                    tag = "bajo"
+
+                else:
+                    estado = "🟢 Correcto"
+                    tag = "normal"
+                    
+                
+
+                self.tree_insumos.insert(
+                    "",
+                    "end",
+                    values=(
+                        estado,
+                        row["nombre"],
+                        row["categoria"],
+                        row["cantidad_actual"],
+                        row["stock_minimo"],
+                        row["unidad"]
+                    ),
+                    tags=(tag,)
+                )
 
             # Gráfico por categoría
             self._generar_grafico_insumos(df)
@@ -865,9 +971,13 @@ class StockModule:
     def guardar_consumo_insumo(self):
         opcion = self.consumo_insumo_var.get()
         data = self._get_insumo_data(opcion)
+        
         if data is None:
             messagebox.showwarning("Advertencia", "Selecciona un insumo")
             return
+
+        stock_anterior = float(data["cantidad_actual"])
+        stock_minimo = float(data["stock_minimo"])
 
         try:
             cantidad = float(self.consumo_cantidad_entry.get() or 0)
@@ -880,13 +990,34 @@ class StockModule:
                 messagebox.showwarning("Advertencia", "La cantidad supera el stock disponible")
                 return
 
-            self.stock_repo.registrar_consumo_insumo(
-                nombre=data['nombre'],
-                cantidad=cantidad,
-                motivo=motivo if motivo else None
+            self.stock_repo.registrar_consumo_insumo(nombre=data['nombre'],cantidad=cantidad,motivo=motivo if motivo else None)
+
+            # Calcular el nuevo stock
+            stock_nuevo = stock_anterior - cantidad
+
+            # Mensaje de éxito
+            messagebox.showinfo(
+                "Éxito",
+                f"✅ Consumo registrado: {cantidad} {data['unidad']}"
             )
 
-            messagebox.showinfo("Éxito", f"✅ Consumo registrado: {cantidad} {data['unidad']}")
+            # Mostrar alerta SOLO si pasó de estar por encima del mínimo
+            # a quedar igual o por debajo del mínimo.
+            if (
+                stock_minimo > 0
+                and stock_anterior > stock_minimo
+                and stock_nuevo <= stock_minimo
+            ):
+
+                messagebox.showwarning(
+                    "⚠ Stock crítico",
+                    (
+                        f"El insumo '{data['nombre']}' ha quedado por debajo "
+                        f"del stock mínimo.\n\n"
+                        f"Stock actual: {stock_nuevo:.2f} {data['unidad']}\n"
+                        f"Stock mínimo: {stock_minimo:.2f} {data['unidad']}"
+                    )
+                )
 
             self.consumo_cantidad_entry.delete(0, "end")
             self.consumo_cantidad_entry.insert(0, "0")
@@ -1189,3 +1320,9 @@ def render_stock(parent):
     """Función principal que se llama desde app.py"""
     module = StockModule(parent)
     return module
+
+
+
+
+
+    
