@@ -2,16 +2,18 @@
 Módulo de Ventas - CustomTkinter
 Gestiona pedidos, despachos y ventas de huevos por canastillas
 """
+import sys
+import traceback
+import pandas as pd
+import customtkinter as ctk
+import matplotlib.pyplot as plt
 from utils import config as util
 from tkcalendar import DateEntry
-import customtkinter as ctk
 from tkinter import ttk, messagebox, filedialog
 from datetime import datetime, date, timedelta
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-import pandas as pd
-import csv
-import sys
+
+
 sys.path.append('..')
 
 from data.database import db
@@ -418,14 +420,24 @@ class VentasModule:
 
             if tipo == 'despachar_ahora':
                 total_canastillas = sum(cantidades.values())
+                
+                pares_embalaje = self._preguntar_embalaje()
+                
+                # Canceló la operación
+                if pares_embalaje is None:
+                    return
+
+                canastillas_embalaje = pares_embalaje * 2
+                total_descontar = total_canastillas + canastillas_embalaje
 
                 stock_info = self.insumos_repo.obtener_stock_canastillas()
-                if stock_info['total'] < total_canastillas:
+                
+                if stock_info['total'] < total_descontar:
                     messagebox.showerror(
                         "❌ Sin canastillas",
                         f"Stock disponible: {int(stock_info['total'])} canastillas\n"
-                        f"Requeridas: {total_canastillas}\n\n"
-                        "Registra una compra de canastillas en Insumos y Pagos."
+                        f"Necesarias: {total_descontar}\n"
+                        f"(Venta: {total_canastillas} + Embalaje: {canastillas_embalaje})"
                     )
                     return
 
@@ -442,13 +454,19 @@ class VentasModule:
                     observaciones="Despacho inmediato"
                 )
 
-                self.insumos_repo.descontar_canastillas(
-                    cantidad=total_canastillas,
-                    motivo=f"Despacho pedido #{pedido_id}"
-                )
+                self.insumos_repo.descontar_canastillas(cantidad=total_descontar,motivo=(f"Despacho pedido #{pedido_id} "f"(Venta: {total_canastillas}, "f"Embalaje: {canastillas_embalaje})"))
 
-                messagebox.showinfo("Éxito",
-                    f"✅ Pedido #{pedido_id} creado y despachado exitosamente")
+                mensaje = (f"✅ Pedido #{pedido_id} creado y despachado exitosamente\n\n"f"📦 Canastillas vendidas: {total_canastillas}" )
+
+                if canastillas_embalaje > 0:
+                    mensaje += (
+                        f"\n🧱 Embalaje: {pares_embalaje} par(es)"
+                        f" ({canastillas_embalaje} canastillas)"
+                    )
+
+                mensaje += f"\n📉 Total descontado: {total_descontar} canastillas"
+
+                messagebox.showinfo("Éxito", mensaje)
             else:
                 messagebox.showinfo("Éxito",
                     f"✅ Pedido #{pedido_id} guardado como pendiente")
@@ -464,8 +482,110 @@ class VentasModule:
             self.label_resumen_valores.configure(text="")
             self._cargar_datos_pedido()
 
+        
+
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            traceback.print_exc()
+            messagebox.showerror("Error", traceback.format_exc())
+
+    def _preguntar_embalaje(self):
+        """Pregunta si se desean agregar pares de canastillas de embalaje.
+        Devuelve:
+            None -> Canceló el proceso
+            0    -> No agregar embalaje
+            1..n -> Número de pares
+        """
+
+        resultado = {"pares": None}
+
+        ventana = ctk.CTkToplevel(self.parent)
+        ventana.title("Canastillas de embalaje")
+        ventana.geometry("420x250")
+        ventana.resizable(False, False)
+        ventana.grab_set()
+
+        ctk.CTkLabel(
+            ventana,
+            text="📦 Canastillas de embalaje",
+            font=util.font_section()
+        ).pack(pady=(20,10))
+
+        ctk.CTkLabel(
+            ventana,
+            text="¿Desea agregar canastillas de embalaje?",
+            font=util.font_label()
+        ).pack()
+
+        pares_var = ctk.IntVar(value=0)
+
+        frame = ctk.CTkFrame(ventana, fg_color="transparent")
+        frame.pack(pady=20)
+
+        def disminuir():
+            if pares_var.get() > 0:
+                pares_var.set(pares_var.get()-1)
+                lbl.configure(text=str(pares_var.get()))
+
+        def aumentar():
+            pares_var.set(pares_var.get()+1)
+            lbl.configure(text=str(pares_var.get()))
+
+        ctk.CTkButton(
+            frame,
+            text="-",
+            width=40,
+            command=disminuir
+        ).pack(side="left", padx=10)
+
+        lbl = ctk.CTkLabel(
+            frame,
+            text="0",
+            width=60,
+            font=util.font_title()
+        )
+        lbl.pack(side="left")
+
+        ctk.CTkButton(
+            frame,
+            text="+",
+            width=40,
+            command=aumentar
+        ).pack(side="left", padx=10)
+
+        ctk.CTkLabel(
+            ventana,
+            text="Cada par corresponde a 2 canastillas.",
+            font=util.font_text()
+        ).pack()
+
+        botones = ctk.CTkFrame(ventana, fg_color="transparent")
+        botones.pack(pady=20)
+
+        def aceptar():
+            resultado["pares"] = pares_var.get()
+            ventana.destroy()
+
+        def cancelar():
+            resultado["pares"] = None
+            ventana.destroy()
+
+        ctk.CTkButton(
+            botones,
+            text="Aceptar",
+            command=aceptar,
+            fg_color="#2ecc71"
+        ).pack(side="left", padx=8)
+
+        ctk.CTkButton(
+            botones,
+            text="Cancelar",
+            command=cancelar,
+            fg_color="#e74c3c"
+        ).pack(side="left", padx=8)
+
+        ventana.wait_window()
+
+        return resultado["pares"]
 
     # ================= TAB: DESPACHAR =================
 
