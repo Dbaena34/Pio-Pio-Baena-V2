@@ -94,14 +94,14 @@
     "text_color_disabled": ["#999999", "#666666"],
     "corner_radius": 8,
     "border_width": 0
-},
+    },
     "CTkScrollableFrame": {
     "label_fg_color": ["#f1f8e9", "#1b4332"],
     "fg_color": ["#ffffff", "#2b2b2b"],
     "corner_radius": 10,
     "border_width": 0,
     "border_color": ["#2d6a4f", "#2d6a4f"]
-},
+    },
     "CTkCheckBox": {
     "corner_radius": 6,
     "border_width": 2,
@@ -111,7 +111,28 @@
     "checkmark_color": ["#FFFFFF", "#FFFFFF"],
     "text_color": ["#000000", "#FFFFFF"],
     "text_color_disabled": ["#A3A3A3", "#5A5A5A"]
-}
+    },
+    "CTkToplevel": {
+        "fg_color": ["#f1f8e9", "#1b4332"]
+    },
+    "CTkSlider": {
+        "fg_color": ["#d9d9d9", "#444444"],
+        "progress_color": ["#52b788", "#40916c"],
+        "button_color": ["#40916c", "#2d6a4f"],
+        "button_hover_color": ["#2d6a4f", "#1b4332"],
+        "corner_radius": 8,
+        "button_corner_radius": 20,
+        "border_width": 4
+    },
+    "CTkRadioButton": {
+        "fg_color": ["#52b788", "#40916c"],
+        "hover_color": ["#40916c", "#2d6a4f"],
+        "border_color": ["#2d6a4f", "#2d6a4f"],
+        "border_width_checked": 6,
+        "border_width_unchecked": 2,
+        "text_color": ["#000000", "#ffffff"],
+        "text_color_disabled": ["#999999", "#666666"]
+    }
 
 
 }
