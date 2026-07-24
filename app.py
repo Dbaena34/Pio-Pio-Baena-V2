@@ -2,13 +2,14 @@
 Aplicación Principal - Pío Pío Baena
 Sistema de Gestión Avícola - Versión CustomTkinter
 """
-
 import customtkinter as ctk
+from data.database import db
 from tkinter import messagebox
-import sys
-from pathlib import Path
+import matplotlib.pyplot as plt
 from utils import config as util
+from data.models import StockRepository
 
+#self.parent.winfo_toplevel().actualizar_alertas() llamada de actualización de alertas desde un módulo
 # Configurar tema y apariencia
 
 ctk.set_default_color_theme("utils/theme.json")  # "blue", "green", "dark-blue"
@@ -39,6 +40,7 @@ class GranjaApp(ctk.CTk):
         
         # Cargar módulo de producción por defecto
         self.show_produccion()
+        self.actualizar_alertas()
     
     def center_window(self):
         """Centra la ventana en la pantalla"""
@@ -123,14 +125,7 @@ class GranjaApp(ctk.CTk):
         self.appearance_mode_menu.set("Claro")
     
     def create_main_container(self):
-        """Crea el contenedor principal donde se cargan los módulos"""
-        self.main_container = ctk.CTkFrame(self, corner_radius=10)
-        self.main_container.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
-        self.main_container.grid_rowconfigure(0, weight=1)
-        self.main_container.grid_columnconfigure(0, weight=1)
-    
-    def create_main_container(self):
-        """Crea el contenedor principal donde se cargan los módulos"""
+        """Contenedor principal"""
 
         self.main_container = ctk.CTkFrame(
             self,
@@ -146,12 +141,63 @@ class GranjaApp(ctk.CTk):
             sticky="nsew"
         )
 
-        self.main_container.grid_rowconfigure(0, weight=1)
+        self.main_container.grid_rowconfigure(1, weight=1)
         self.main_container.grid_columnconfigure(0, weight=1)
+        
+
+        # =====================================================
+        # TARJETA GLOBAL DE ALERTAS
+        # =====================================================
+
+        self.alert_frame = ctk.CTkFrame(
+            self.main_container,
+            fg_color="#ffe5e5",
+            corner_radius=10
+        )
+
+        self.alert_frame.grid(
+            row=0,
+            column=0,
+            sticky="ew",
+            pady=(0,10)
+        )
+
+        self.alert_label = ctk.CTkLabel(
+            self.alert_frame,
+            text="Sin alertas",
+            justify="left",
+            wraplength=1000,
+            text_color="#c0392b",
+            font=util.font_label()
+        )
+
+        self.alert_label.pack(
+            padx=15,
+            pady=10,
+            anchor="w"
+        )
+        self.alert_frame.grid_remove()
+
+        # =====================================================
+        # CONTENEDOR DE LOS MÓDULOS
+        # =====================================================
+
+        self.module_container = ctk.CTkFrame(
+            self.main_container,
+            fg_color="transparent"
+        )
+
+        self.module_container.grid(
+            row=1,
+            column=0,
+            sticky="nsew"
+        )
+
+        self.module_container.grid_rowconfigure(0, weight=1)
+        self.module_container.grid_columnconfigure(0, weight=1)
     
     def clear_main_container(self):
-        import matplotlib.pyplot as plt
-
+        
         # 🔥 1. Cerrar gráficos activos
         plt.close('all')
 
@@ -163,11 +209,75 @@ class GranjaApp(ctk.CTk):
                 pass
 
         # 🔥 3. Limpiar widgets visuales
-        for widget in self.main_container.winfo_children():
+        for widget in self.module_container.winfo_children():
             widget.destroy()
 
         # 🔥 4. Resetear referencia
         self.current_module = None
+        
+    def actualizar_alertas(self):
+        """Actualiza la tarjeta global de alertas."""
+
+        try:
+            
+            stock_repo = StockRepository(db)
+            stock_insumos = stock_repo.obtener_stock_insumos()
+
+            criticos = []
+            bajos = []
+
+            for item in stock_insumos:
+
+                actual = float(item["cantidad_actual"])
+                minimo = float(item["stock_minimo"])
+
+                if minimo <= 0:
+                    continue
+
+                if actual <= minimo:
+
+                    criticos.append(
+                        f"🔴 {item['nombre']}: {actual} {item['unidad']} (mín. {minimo})"
+                    )
+
+                elif actual <= minimo * 1.30:
+
+                    bajos.append(
+                        f"🟡 {item['nombre']}: {actual} {item['unidad']} (mín. {minimo})"
+                    )
+
+            texto = ""
+
+            if criticos:
+                texto += "🔴 ALERTA DE INVENTARIO\n\n"
+                texto += "\n".join(criticos)
+
+            if bajos:
+
+                if texto:
+                    texto += "\n\n"
+
+                texto += "🟡 Próximos al stock mínimo\n\n"
+                texto += "\n".join(bajos)
+
+            # ============================================
+            # Mostrar u ocultar la tarjeta
+            # ============================================
+
+            if texto:
+
+                self.alert_label.configure(text=texto)
+
+                self.alert_frame.grid()
+
+            else:
+
+                self.alert_frame.grid_remove()
+        except Exception as e:
+            self.alert_label.configure(
+                text=f"Error al actualizar alertas: {str(e)}"
+            )
+            self.alert_frame.grid()
         
     def change_appearance_mode(self, new_mode: str):
         """Cambia el tema de la aplicación"""
@@ -186,7 +296,7 @@ class GranjaApp(ctk.CTk):
         # Importar y crear módulo de producción
         try:
             from modules.produccion_tk import ProduccionModule
-            self.current_module = ProduccionModule(self.main_container)
+            self.current_module = ProduccionModule(self.module_container)
         except ImportError as e:
             self.show_module_placeholder("Producción", "produccion_tk.py", str(e))
     
@@ -197,7 +307,7 @@ class GranjaApp(ctk.CTk):
         
         try:
             from modules.stock_tk import StockModule
-            self.current_module = StockModule(self.main_container)
+            self.current_module = StockModule(self.module_container)
         except ImportError as e:
             self.show_module_placeholder("Stock", "stock_tk.py", str(e))
     
@@ -208,7 +318,7 @@ class GranjaApp(ctk.CTk):
         
         try:
             from modules.ventas_tk import VentasModule
-            self.current_module = VentasModule(self.main_container)
+            self.current_module = VentasModule(self.module_container)
         except ImportError as e:
             self.show_module_placeholder("Ventas", "ventas_tk.py", str(e))
     
@@ -219,7 +329,7 @@ class GranjaApp(ctk.CTk):
         
         try:
             from modules.insumos_pagos_tk import InsumosPagosModule
-            self.current_module = InsumosPagosModule(self.main_container)
+            self.current_module = InsumosPagosModule(self.module_container)
         except ImportError as e:
             self.show_module_placeholder("Insumos y Pagos", "insumos_pagos_tk.py", str(e))
     
@@ -230,7 +340,7 @@ class GranjaApp(ctk.CTk):
         
         try:
             from modules.reportes_tk import ReportesModule
-            self.current_module = ReportesModule(self.main_container)
+            self.current_module = ReportesModule(self.module_container)
         except ImportError as e:
             self.show_module_placeholder("Reportes", "reportes_tk.py", str(e))
     
