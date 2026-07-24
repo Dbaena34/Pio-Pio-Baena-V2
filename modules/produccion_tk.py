@@ -306,7 +306,7 @@ class ProduccionModule:
         self.label_gallinas_consumo = ctk.CTkLabel(
             frame_f,
             text="🐔 Gallinas usadas: --",
-            font=util.font_text()
+            font=util.font_label()
         )
         self.label_gallinas_consumo.pack(pady=5)
 
@@ -358,6 +358,74 @@ class ProduccionModule:
             fg_color="#52b788",
             hover_color="#e67e22"
         ).pack(pady=10)
+        self.cargar_poblacion_actual()
+        
+        # ==========================================================
+        # DESCARTE DE CANASTILLAS
+        # ==========================================================
+
+        ctk.CTkLabel(
+            frame_g,
+            text="📦 Descarte de Canastillas",
+            font=util.font_section()
+        ).pack(anchor="w", padx=10, pady=(20, 5))
+
+        self.label_stock_canastillas = ctk.CTkLabel(
+            frame_g,
+            text="Stock actual: --",
+            font=util.font_label()
+        )
+        self.label_stock_canastillas.pack(anchor="w", padx=10)
+
+        ctk.CTkLabel(
+            frame_g,
+            text="Cantidad a descartar",
+            font=util.font_text()
+        ).pack(pady=(8,0))
+
+        self.descarte_canastillas_entry = ctk.CTkEntry(
+            frame_g,
+            height=40,
+            justify="center",
+            font=util.font_input()
+        )
+        self.descarte_canastillas_entry.insert(0, "0")
+        self.descarte_canastillas_entry.pack(pady=5)
+
+        self.descarte_canastillas_entry.bind(
+            "<KeyRelease>",
+            lambda e: self.calcular_stock_canastillas()
+        )
+
+        self.label_stock_resultante = ctk.CTkLabel(
+            frame_g,
+            text="Stock resultante: --",
+            font=util.font_label()
+        )
+        self.label_stock_resultante.pack(anchor="w", padx=10)
+
+        ctk.CTkLabel(
+            frame_g,
+            text="Motivo",
+            font=util.font_label()
+        ).pack(anchor="w", padx=10, pady=(10,0))
+
+        self.obs_canastillas_entry = ctk.CTkEntry(
+            frame_g,
+            placeholder_text="Ej: rotas, deterioradas...",
+            font=util.font_text()
+        )
+        self.obs_canastillas_entry.pack(fill="x", padx=10, pady=5)
+
+        ctk.CTkButton(
+            frame_g,
+            text="💾 Guardar Descarte",
+            command=self.guardar_descarte_canastillas,
+            font=util.font_input(),
+            fg_color="#52b788",
+            hover_color="#2980b9"
+        ).pack(pady=10)
+        
         self.cargar_poblacion_actual()
 
     # ================= GUARDAR =================
@@ -517,6 +585,21 @@ class ProduccionModule:
             self.label_gallinas_consumo.configure(
                 text=f"🐔 Gallinas usadas: {cantidad}"
             )
+            
+            stock = self.insumos_repo.obtener_stock_canastillas()
+
+            self.label_stock_canastillas.configure(
+                text=f"📦 Stock actual: {int(stock['total'])}"
+            )
+
+            self.label_stock_resultante.configure(
+                text=f"📦 Stock resultante: {int(stock['total'])}"
+            )
+
+            self.descarte_canastillas_entry.delete(0, "end")
+            self.descarte_canastillas_entry.insert(0, "0")
+
+            self.obs_canastillas_entry.delete(0, "end")
 
         except Exception as e:
             self.label_poblacion_actual.configure(
@@ -557,6 +640,61 @@ class ProduccionModule:
         except:
             pass
     
+    def calcular_stock_canastillas(self):
+        try:
+            stock = self.insumos_repo.obtener_stock_canastillas()
+
+            actual = int(stock["total"])
+            descarte = int(self.descarte_canastillas_entry.get() or 0)
+
+            restante = max(0, actual - descarte)
+
+            self.label_stock_resultante.configure(
+                text=f"📦 Stock resultante: {restante}"
+            )
+
+        except:
+            pass
+        
+    def guardar_descarte_canastillas(self):
+
+        try:
+
+            cantidad = int(self.descarte_canastillas_entry.get() or 0)
+
+            if cantidad <= 0:
+                messagebox.showwarning(
+                    "Advertencia",
+                    "Ingrese una cantidad válida."
+                )
+                return
+
+            motivo = self.obs_canastillas_entry.get().strip()
+
+            stock = self.insumos_repo.obtener_stock_canastillas()
+
+            if cantidad > stock["total"]:
+                messagebox.showerror(
+                    "Error",
+                    "No hay suficientes canastillas en inventario."
+                )
+                return
+
+            self.insumos_repo.descontar_canastillas(
+                cantidad=cantidad,
+                motivo=motivo if motivo else "Descarte de canastillas"
+            )
+
+            messagebox.showinfo(
+                "Éxito",
+                f"Se descartaron {cantidad} canastillas."
+            )
+
+            self.cargar_poblacion_actual()
+
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
 
     # ================= HISTORIAL =================
 
