@@ -8,6 +8,7 @@ from tkinter import messagebox
 import matplotlib.pyplot as plt
 from utils import config as util
 from data.models import StockRepository
+APP_VERSION = "v 2.1.0"
 
 #self.parent.winfo_toplevel().actualizar_alertas() llamada de actualización de alertas desde un módulo
 # Configurar tema y apariencia
@@ -106,6 +107,15 @@ class GranjaApp(ctk.CTk):
 
         self.btn_reportes = create_nav_button("📈 Reportes", self.show_reportes)
         self.btn_reportes.grid(row=6, column=0, padx=20, pady=8, sticky="ew")
+        
+        # ================= VERSIÓN =================
+        self.version_label = ctk.CTkLabel(
+            self.sidebar_frame,
+            text=f"Versión {APP_VERSION}",
+            font=util.font_label(),
+            text_color="gray50"
+        )
+        self.version_label.grid(row=7, column=0, padx=20, pady=(10, 5))
 
         # ================= TEMA =================
         self.appearance_mode_label = ctk.CTkLabel(
