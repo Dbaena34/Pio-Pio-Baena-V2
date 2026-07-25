@@ -2,16 +2,16 @@
 Módulo de Insumos y Pagos - CustomTkinter
 Gestiona compras de insumos, pagos a trabajadores, configuración de precios y resumen financiero
 """
+import sys
+import pandas as pd
+import customtkinter as ctk
+import matplotlib.pyplot as plt
 from utils import config as util
 from tkcalendar import DateEntry
-import customtkinter as ctk
-from tkinter import ttk, messagebox, filedialog
 from datetime import datetime, date, timedelta
+from tkinter import ttk, messagebox, filedialog
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-import pandas as pd
-import csv
-import sys
+
 sys.path.append('..')
 
 from data.database import db
@@ -121,7 +121,7 @@ class InsumosPagosModule:
             values=['Alimento', 'Medicamento', 'Mantenimiento', 'Canastillas', 'Otros']
         )
         self.compra_cat_combo.grid(row=1, column=1, sticky="ew", pady=4)
-        self.compra_cat_combo.bind("<<ComboboxSelected>>", lambda e: self._actualizar_opciones_nombre())
+        self.compra_cat_combo.bind("<<ComboboxSelected>>",lambda e: (self._actualizar_opciones_nombre(),self._actualizar_unidad_compra()))
         
         self.compra_nombre = ttk.Combobox(row2, font=("Arial", 13))
         self.compra_nombre.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
@@ -145,11 +145,11 @@ class InsumosPagosModule:
         self.compra_cantidad.grid(row=1, column=0, sticky="ew", padx=(0, 8), pady=4)
         self.compra_cantidad.bind("<KeyRelease>", lambda e: self._calcular_costo_total_compra())
 
-        self.compra_unidad_var = ctk.StringVar(value="kg")
+        self.compra_unidad_var = ctk.StringVar(value="bultos")
         self.compra_unidad_combo = ttk.Combobox(
             row3, textvariable=self.compra_unidad_var, state="readonly",
             font=("Arial", 13),
-            values=['kg', 'bultos', 'litros', 'unidades']
+            values=["bultos"]
         )
         self.compra_unidad_combo.grid(row=1, column=1, sticky="ew", pady=4)
 
@@ -254,14 +254,38 @@ class InsumosPagosModule:
             'Mantenimiento': [],
             'Otros': []
         }
+
         cat = self.compra_cat_var.get()
         opciones = opciones_por_categoria.get(cat, [])
-        self.compra_nombre['values'] = opciones
+
+        self.compra_nombre["values"] = opciones
+
         if opciones:
             self.compra_nombre.set(opciones[0])
         else:
             self.compra_nombre.set("")
-    
+            
+    def _actualizar_unidad_compra(self):
+
+        categoria = self.compra_cat_var.get()
+
+        if categoria == "Alimento":
+            self.compra_unidad_combo["values"] = ["bultos"]
+            self.compra_unidad_var.set("bultos")
+
+        elif categoria == "Canastillas":
+            self.compra_unidad_combo["values"] = ["unidades"]
+            self.compra_unidad_var.set("unidades")
+
+        else:
+            self.compra_unidad_combo["values"] = [
+                "kg",
+                "bultos",
+                "litros",
+                "unidades"
+            ]
+            self.compra_unidad_var.set("kg")
+        
     def _calcular_costo_total_compra(self):
         try:
             cant = safe_float(self.compra_cantidad.get())

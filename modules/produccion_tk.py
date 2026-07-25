@@ -360,6 +360,7 @@ class ProduccionModule:
         ).pack(pady=10)
         self.cargar_poblacion_actual()
         
+        
         # ==========================================================
         # DESCARTE DE CANASTILLAS
         # ==========================================================
@@ -554,6 +555,7 @@ class ProduccionModule:
 )
 
             if hay_stock:
+                self.parent.winfo_toplevel().actualizar_alertas()
                 messagebox.showinfo("Éxito", f"Consumo registrado: {total_kg:.2f} kg ({total_bultos:.3f} bultos)\n"f"Descontado del stock de alimento.")
             else:
                 messagebox.showwarning(
@@ -684,6 +686,7 @@ class ProduccionModule:
                 cantidad=cantidad,
                 motivo=motivo if motivo else "Descarte de canastillas"
             )
+            self.parent.winfo_toplevel().actualizar_alertas()
 
             messagebox.showinfo(
                 "Éxito",

@@ -481,6 +481,7 @@ class VentasModule:
             self.label_resumen_cantidades.configure(text="Sin cantidades aún")
             self.label_resumen_valores.configure(text="")
             self._cargar_datos_pedido()
+            self.parent.winfo_toplevel().actualizar_alertas()
 
         
 
