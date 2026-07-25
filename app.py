@@ -63,7 +63,7 @@ class GranjaApp(ctk.CTk):
             fg_color=util.CARD
         )
         self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(7, weight=1)
+        self.sidebar_frame.grid_rowconfigure(9, weight=1)
 
         # ================= HEADER =================
         self.logo_label = ctk.CTkLabel(
@@ -109,6 +109,9 @@ class GranjaApp(ctk.CTk):
         self.btn_reportes = create_nav_button("📈 Reportes", self.show_reportes)
         self.btn_reportes.grid(row=6, column=0, padx=20, pady=8, sticky="ew")
         
+        self.btn_explorador = create_nav_button("🔎 Explorador DB",self.show_explorador_db)
+        self.btn_explorador.grid(row=7, column=0, padx=20, pady=8, sticky="ew")
+        
         # ================= VERSIÓN =================
         self.version_label = ctk.CTkLabel(
             self.sidebar_frame,
@@ -116,15 +119,15 @@ class GranjaApp(ctk.CTk):
             font=util.font_label(),
             text_color="gray50"
         )
-        self.version_label.grid(row=7, column=0, padx=20, pady=(10, 5))
-
+        self.version_label.grid(row=8, column=0, padx=20, pady=(10, 5))
+        
         # ================= TEMA =================
         self.appearance_mode_label = ctk.CTkLabel(
             self.sidebar_frame,
             text="Tema",
             font=util.font_label()
         )
-        self.appearance_mode_label.grid(row=8, column=0, padx=20, pady=(15, 5))
+        self.appearance_mode_label.grid(row=9, column=0, padx=20, pady=(15, 5))
 
         self.appearance_mode_menu = ctk.CTkOptionMenu(
             self.sidebar_frame,
@@ -132,7 +135,7 @@ class GranjaApp(ctk.CTk):
             command=self.change_appearance_mode,
             font=util.font_label()
         )
-        self.appearance_mode_menu.grid(row=9, column=0, padx=20, pady=(0, 20))
+        self.appearance_mode_menu.grid(row=10, column=0, padx=20, pady=(0, 20))
         self.appearance_mode_menu.set("Claro")
     
     def create_main_container(self):
@@ -354,6 +357,20 @@ class GranjaApp(ctk.CTk):
             self.current_module = ReportesModule(self.module_container)
         except ImportError as e:
             self.show_module_placeholder("Reportes", "reportes_tk.py", str(e))
+            
+    def show_explorador_db(self):
+        self.clear_main_container()
+        self.highlight_button(self.btn_explorador)
+
+        try:
+            from modules.explorador_db_tk import ExploradorDBModule
+            self.current_module = ExploradorDBModule(self.module_container)
+        except ImportError as e:
+            self.show_module_placeholder(
+                "Explorador DB",
+                "explorador_db_tk.py",
+                str(e)
+            )
     
     def highlight_button(self, button):
         """Resalta el botón activo"""
@@ -363,7 +380,8 @@ class GranjaApp(ctk.CTk):
             self.btn_stock,
             self.btn_ventas,
             self.btn_insumos,
-            self.btn_reportes
+            self.btn_reportes,
+            self.btn_explorador
         ]:
             btn.configure(fg_color=util.SECUNDARY)
 
