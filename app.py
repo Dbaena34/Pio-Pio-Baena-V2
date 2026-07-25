@@ -8,7 +8,8 @@ from tkinter import messagebox
 import matplotlib.pyplot as plt
 from utils import config as util
 from data.models import StockRepository
-APP_VERSION = "v 2.1.0"
+
+APP_VERSION = "2.1.1"
 
 #self.parent.winfo_toplevel().actualizar_alertas() llamada de actualización de alertas desde un módulo
 # Configurar tema y apariencia
